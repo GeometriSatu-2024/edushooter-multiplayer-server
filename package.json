@@ -4,7 +4,8 @@
   "description": "A multiplayer game server for the Edushooter mobile game app, this server handles lobby and party matching, it does not handle the actual game logic.",
   "main": "server.js",
   "scripts": {
-    "start-dev": "nodemon server.js"
+    "start-dev": "nodemon server.js",
+    "start": "node server.js"
   },
   "author": "",
   "license": "ISC",

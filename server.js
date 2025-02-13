@@ -1,6 +1,6 @@
 // Libraries & dependencies
 const WebSocket = require("ws");
-const { exec } = require("child_process");
+const { spawn, exec } = require("child_process");
 const { net } = require("net");
 
 // Constants
@@ -25,14 +25,15 @@ const AVAILABLE_PORTS = [50000, 50001, 50002, 50003, 50004, 50005]; // TODO, mak
 // Initialize
 const lobbies = new Map();
 
-const server = new WebSocket.Server({ port: LOBBY_PORT });
+// Bind server on port LOBBY_PORT and to all hosts
+const server = new WebSocket.Server({ port: LOBBY_PORT, host: '0.0.0.0' });
 
 //#region CLASSES
 class Lobby {
-  constructor(leaderId, ws) {
+  constructor(leaderId, playerName, ws) {
     this.leader = leaderId;
     this.running = false;
-    this.players = [new Player(leaderId, ws)];
+    this.players = [new Player(leaderId, playerName, ws)];
     this.port = getAvailablePort();
   }
 
@@ -52,8 +53,9 @@ class Lobby {
 }
 
 class Player {
-  constructor(playerId, ws) {
+  constructor(playerId, playerName, ws) {
     this.id = playerId;
+    this.name = playerName;
     this.ready = false;
     this.socket = ws;
   }
@@ -121,6 +123,7 @@ function updateLobbyState(lobbyCode, exceptionId = null) {
       leader: lobby.leader,
       players: lobby.players.map((player) => ({
         id: player.id,
+        name: player.name,
         ready: player.ready,
       })),
     },
@@ -174,7 +177,24 @@ function startGameServer(lobbyId, playerCount, difficulty, port) {}
 
 //#region CONNECTION HANDLER
 // Handler for players attempting to create lobby
-function handleCreateLobby(ws, playerId) {
+function handleCreateLobby(ws, playerId, playerName, messageId) {
+  // Check if playerId is missing
+  if (!playerId){
+    ws.send(
+      JSON.stringify({
+        success: false,
+        error: "NO_ID_GIVEN",
+        message: `You are attempting to request the server without providing an authenticated id, please try again!`,
+      })
+    );
+    return;
+  }
+
+  let name = playerName;
+  if (!name) {
+    name = playerId;
+  }
+  
   // If the player already exists
   if (playerExists(playerId)) {
     ws.send(
@@ -182,6 +202,7 @@ function handleCreateLobby(ws, playerId) {
         success: false,
         error: "PLAYER_ALREADY_IN_LOBBY",
         message: `The player with id ${playerId} is already in a lobby.`,
+        msgId: messageId,
       })
     );
     return;
@@ -197,6 +218,7 @@ function handleCreateLobby(ws, playerId) {
         error: "LOBBY_AT_CAPACITY",
         message:
           "The number of lobbies the server can handle has exceeded its capacity. Cannot create a new lobby, please try again later!",
+          msgId: messageId,
       })
     );
     return;
@@ -205,7 +227,7 @@ function handleCreateLobby(ws, playerId) {
   // We have enough capacity for the lobby, create a new one
   const lobbyCode = generateLobbyCode();
 
-  lobbies.set(lobbyCode, new Lobby(playerId, ws));
+  lobbies.set(lobbyCode, new Lobby(playerId, name, ws));
 
   logLobbyStates();
   ws.send(
@@ -215,12 +237,30 @@ function handleCreateLobby(ws, playerId) {
       lobby_code: lobbyCode,
       message:
         "A new lobby has been created, use the lobby code to let other players join in the lobby!",
+      msgId: messageId,
     })
   );
 }
 
 // Handler for players attempting to join a lobby
-function handleJoinLobby(ws, playerId, lobbyCode) {
+function handleJoinLobby(ws, playerId, playerName, lobbyCode, messageId) {
+  // Check if playerId is missing
+  if (!playerId){
+    ws.send(
+      JSON.stringify({
+        success: false,
+        error: "NO_ID_GIVEN",
+        message: `You are attempting to request the server without providing an authenticated id, please try again!`,
+      })
+    );
+    return;
+  }
+
+  let name = playerName;
+  if (!name) {
+    name = playerId;
+  }
+
   // If the player already exists
   if (playerExists(playerId)) {
     ws.send(
@@ -228,6 +268,7 @@ function handleJoinLobby(ws, playerId, lobbyCode) {
         success: false,
         error: "PLAYER_ALREADY_IN_LOBBY",
         message: `The player with id ${playerId} is already in a lobby.`,
+        msgId: messageId,
       })
     );
     return;
@@ -242,6 +283,7 @@ function handleJoinLobby(ws, playerId, lobbyCode) {
         success: false,
         error: "INVALID_LOBBY_CODE",
         message: `The lobby code (${lobbyCode}) requested does not exist, please examine the code and request a valid one!`,
+        msgId: messageId,
       })
     );
     return;
@@ -255,6 +297,7 @@ function handleJoinLobby(ws, playerId, lobbyCode) {
         success: false,
         error: "LOBBY_FULL",
         message: `The lobby you are attempting to join is already full, please try again later!`,
+        msgId: messageId,
       })
     );
     return;
@@ -268,41 +311,46 @@ function handleJoinLobby(ws, playerId, lobbyCode) {
         error: "PLAYER_ALREADY_EXISTS",
         message:
           "You are attempting to join a lobby where you already are a part of! This is not supposed to happen.",
+        msgId: messageId,
       })
     );
     return;
   }
 
   // Passed all checks, add the player
-  lobby.players.push(new Player(playerId, ws));
+  lobby.players.push(new Player(playerId, name, ws));
 
   logLobbyStates();
-  updateLobbyState(lobbyCode);
 
   ws.send(
     JSON.stringify({
       success: true,
       action: "JOINED_LOBBY",
       message: "You have successfully joined the lobby!",
+      lobby_code: lobbyCode,
       otherPlayers: lobby.players
         .map((player) => ({
           id: player.id,
           ready: player.ready,
         }))
         .filter((player) => player.id !== playerId),
+      msgId: messageId,
     })
   );
+
+  updateLobbyState(lobbyCode);
   return;
 }
 
 // Handler for players attempting to set ready
-function handleSetReady(ws, playerId, lobbyCode, isReady) {
+function handleSetReady(ws, playerId, lobbyCode, isReady, messageId) {
   if (playerId == null) {
     ws.send(
       JSON.stringify({
         success: false,
         error: "INVALID_PLAYERID",
         message: `The lobby cannot recognize your connection's ID, this should not happen!`,
+        msgId: messageId,
       })
     );
     return;
@@ -315,6 +363,7 @@ function handleSetReady(ws, playerId, lobbyCode, isReady) {
         success: false,
         error: "INVALID_LOBBY_CODE",
         message: `The lobby code (${lobbyCode}) requested does not exist, please examine the code and request a valid one!`,
+        msgId: messageId,
       })
     );
     return;
@@ -333,6 +382,7 @@ function handleSetReady(ws, playerId, lobbyCode, isReady) {
         error: "PLAYER_DOES_NOT_EXIST",
         message:
           "There is no player with that ID in the lobby, this is not supposed to happen!",
+        msgId: messageId,
       })
     );
     return;
@@ -350,19 +400,22 @@ function handleSetReady(ws, playerId, lobbyCode, isReady) {
       success: true,
       action: "SET_READY_STATUS",
       message: `You have successfully set your ready status to ${isReady}!`,
+      msgId: messageId,
     })
   );
   return;
 }
 
 // Handler for a player attempting to leave
-function handleLeaveLobby(ws, playerId, lobbyCode) {
+function handleLeaveLobby(ws, playerId, lobbyCode, messageId) {
+  console.log(`Attempting to handle player ${playerId} leaving the lobby ${lobbyCode}`);
   if (playerId == null) {
     ws.send(
       JSON.stringify({
         success: false,
         error: "INVALID_PLAYERID",
         message: `The lobby cannot recognize your connection's ID, this should not happen!`,
+        msgId: messageId,
       })
     );
     return;
@@ -375,6 +428,7 @@ function handleLeaveLobby(ws, playerId, lobbyCode) {
         success: false,
         error: "INVALID_LOBBY_CODE",
         message: `The lobby code (${lobbyCode}) requested does not exist, please examine the code and request a valid one!`,
+        msgId: messageId,
       })
     );
     return;
@@ -393,6 +447,7 @@ function handleLeaveLobby(ws, playerId, lobbyCode) {
         error: "PLAYER_DOES_NOT_EXIST",
         message:
           "There is no player with that ID in the lobby, this is not supposed to happen!",
+        msgId: messageId,
       })
     );
     return;
@@ -430,24 +485,21 @@ function handleLeaveLobby(ws, playerId, lobbyCode) {
       success: true,
       action: "PLAYER_LEFT",
       message: `You have successfully left the lobby!`,
+      msgId: messageId,
     })
   );
   return;
 }
 
 // Handler that attempts to run a bash script that starts the game
-function handleStartGame(
-  ws,
-  playerId,
-  lobbyCode,
-  difficultyLevel
-) {
+function handleStartGame(ws, playerId, lobbyCode, difficultyLevel, messageId) {
   if (playerId == null) {
     ws.send(
       JSON.stringify({
         success: false,
         error: "INVALID_PLAYERID",
         message: `The lobby cannot recognize your connection's ID, this should not happen!`,
+        msgId: messageId,
       })
     );
     return;
@@ -459,6 +511,7 @@ function handleStartGame(
         success: false,
         error: "INVALID_LOBBY_CODE",
         message: `The lobby code (${lobbyCode}) requested does not exist, please examine the code and request a valid one!`,
+        msgId: messageId,
       })
     );
     return;
@@ -472,6 +525,7 @@ function handleStartGame(
         success: false,
         error: "INVALID_PERMISSION",
         message: `The caller is not a leader of the lobby ${lobbyCode}, only the leader can start the game!`,
+        msgId: messageId,
       })
     );
     return;
@@ -485,6 +539,7 @@ function handleStartGame(
           success: false,
           error: "LOBBY_NOT_READY",
           message: `Some players are not ready, cannot start the game!`,
+          msgId: messageId,
         })
       );
       return;
@@ -497,48 +552,66 @@ function handleStartGame(
   const portAddress = lobby.port;
 
   // Default to 0
-  if (!difficultyLevel){
+  if (!difficultyLevel) {
     difficultyLevel = 0;
   }
 
-  const start_command = `./start_edushooter_server.sh ${playerCount} ${PUBLIC_IP} ${difficultyLevel} ${portAddress}`;
-  console.log(`Attempting to start game server with bash: ${start_command}`);
+  const startCommand = "start_server.bat";
+  const args = [playerCount, PUBLIC_IP, difficultyLevel, portAddress];
 
-  // TODO: TEST ON LINUX SERVER
-  // const process = exec(start_command, (error, stdout, stderr) => {
-  //   if (error) {
-  //     console.error(`Error executing script: ${error.message}`);
-  //     return;
-  //   }
-  //   if (stderr) {
-  //     console.warn(`Script stderr: ${stderr}`);
-  //   }
-  //   console.log(`Script started successfully:\n${stdout}`);
+  console.log(
+    `Attempting to start game server with batch file: ${startCommand} ${args.join(
+      " "
+    )}`
+  );
+
+  // TODO: MODIFY FOR LINUX SERVER
+  // const process = spawn("cmd.exe", ["/c", startCommand, ...args], {
+  //   stdio: "ignore",
+  //   detached: true,
   // });
 
-  // Return network config so players can connect to the server
+  // process.on("error", (err) => {
+  //   console.error(`Failed to start process: ${err.message}`);
+  //   ws.send(
+  //     JSON.stringify({
+  //       success: false,
+  //       error: "CANNOT_START_GAME",
+  //       message: "An error has occurred, cannot start game!",
+  //       msgId: messageId,
+  //     })
+  //   );
+  // });
+
+  // Send success response immediately after starting the process
+  console.log(
+    "Script started successfully, game server should be running in the background."
+  );
+
   ws.send(
     JSON.stringify({
       success: true,
       action: "GAME_SERVER_READY",
-      message: `Server has successfully started, here are the network configurations.`,
+      message:
+        "Server has successfully started, here are the network configurations.",
       config: {
         externalIP: PUBLIC_IP,
         portAddress: portAddress,
-      }
+      },
+      msgId: messageId,
     })
   );
-  return;
 }
 
 // Handler that attempts to change the leader role to another player
-function handleChangeLeader(ws, playerId, targetId, lobbyCode) {
+function handleChangeLeader(ws, playerId, targetId, lobbyCode, messageId) {
   if (playerId == null) {
     ws.send(
       JSON.stringify({
         success: false,
         error: "INVALID_PLAYERID",
         message: `The lobby cannot recognize your connection's ID, this should not happen!`,
+        msgId: messageId
       })
     );
     return;
@@ -550,6 +623,7 @@ function handleChangeLeader(ws, playerId, targetId, lobbyCode) {
         success: false,
         error: "INVALID_PLAYERID",
         message: `The lobby cannot recognize your target's ID, try again!`,
+        msgId: messageId
       })
     );
     return;
@@ -562,6 +636,7 @@ function handleChangeLeader(ws, playerId, targetId, lobbyCode) {
         success: false,
         error: "INVALID_LOBBY_CODE",
         message: `The lobby code (${lobbyCode}) requested does not exist, please examine the code and request a valid one!`,
+        msgId: messageId
       })
     );
     return;
@@ -574,6 +649,7 @@ function handleChangeLeader(ws, playerId, targetId, lobbyCode) {
         success: false,
         error: "INVALID_PERMISSION",
         message: `The caller is not a leader of the lobby ${lobbyCode}, only the leader can bestow leadership!`,
+        msgId: messageId,
       })
     );
     return;
@@ -594,6 +670,7 @@ function handleChangeLeader(ws, playerId, targetId, lobbyCode) {
         error: "PLAYER_DOES_NOT_EXIST",
         message:
           "There are no player(s) with that ID in the lobby, check both playerId and targetId in the request!",
+        msgId: messageId,
       })
     );
     return;
@@ -609,19 +686,21 @@ function handleChangeLeader(ws, playerId, targetId, lobbyCode) {
       success: true,
       action: "LEADER_CHANGED",
       message: `You have successfully transferred leadership to player ${targetId}!`,
+      msgId: messageId,
     })
   );
   return;
 }
 
 // Handler that returns an error if the action isn't a valid one
-function handleUnknownAction(ws, action) {
+function handleUnknownAction(ws, action, messageId) {
   ws.send(
     JSON.stringify({
       success: false,
       error: "UNKNOWN_ACTION",
       message: `The action you have attempted to do (${action}) is not valid. You can choose from the following valid actions instead. The brackets are properties that MUST be included with the command.`,
       valid_actions: VALID_COMMANDS,
+      msgId: messageId
     })
   );
 }
@@ -629,44 +708,81 @@ function handleUnknownAction(ws, action) {
 //#endregion
 
 server.on("connection", (ws) => {
+  console.log("New connection established");
+
   ws.on("message", (message) => {
     const data = JSON.parse(message);
 
     const connectedPlayer = getPlayerIdFromSocket(ws);
     const connectedLobby = getLobbyCodeFromPlayerId(connectedPlayer);
 
+    const messageId = data.msgId;
+
+    if (!messageId){
+      ws.send(
+        JSON.stringify({
+          success: false,
+          error: "NO_MESSAGE_ID",
+          message:
+            "All messages from the client should contain a unique message Id, this will be used to notify a reply.",
+          msgId: messageId,
+        })
+      );
+      return;
+    }
+
     switch (data.action) {
       // Requires player id to initialize
       case "CREATE_LOBBY":
-        handleCreateLobby(ws, data.playerId);
+        handleCreateLobby(ws, data.playerId, data.playerName, messageId);
         break;
 
       case "JOIN_LOBBY":
-        handleJoinLobby(ws, data.playerId, data.lobbyCode);
+        handleJoinLobby(ws, data.playerId, data.playerName, data.lobbyCode, messageId);
         break;
 
       // Does not require player id
       case "SET_READY":
-        handleSetReady(ws, connectedPlayer, connectedLobby, data.isReady);
+        handleSetReady(ws, connectedPlayer, connectedLobby, data.isReady, messageId);
         break;
 
       case "LEAVE_LOBBY":
-        handleLeaveLobby(ws, connectedPlayer, connectedLobby);
+        handleLeaveLobby(ws, connectedPlayer, connectedLobby, messageId);
         break;
 
       case "START_GAME":
-        handleStartGame(ws, connectedPlayer, connectedLobby, data.difficultyLevel);
+        handleStartGame(
+          ws,
+          connectedPlayer,
+          connectedLobby,
+          data.difficultyLevel,
+          messageId
+        );
         break;
 
       case "CHANGE_LEADER":
-        handleChangeLeader(ws, connectedPlayer, data.targetId, connectedLobby);
+        handleChangeLeader(ws, connectedPlayer, data.targetId, connectedLobby, messageId);
         break;
 
       default:
-        handleUnknownAction(ws, data.action);
+        handleUnknownAction(ws, data.action, messageId);
         break;
+    }
+  });
+
+  ws.on("close", () => {
+    // Handle player leaving
+    const leavingPlayer = getPlayerIdFromSocket(ws);
+    const leftLobby = getLobbyCodeFromPlayerId(leavingPlayer);
+
+    console.log(`Connection from ${leavingPlayer} with lobby ${leftLobby} has ended`);
+    if (leavingPlayer && leftLobby){
+      // Remove the player from the lobby
+      handleLeaveLobby(ws, leavingPlayer, leftLobby);
     }
   });
 });
 
-console.log(`Lobby server running on port ${LOBBY_PORT}`);
+server.on('listening', () => {
+  console.log(`Lobby server is listening on port ${LOBBY_PORT}`);
+});
