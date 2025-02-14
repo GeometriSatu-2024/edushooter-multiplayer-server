@@ -136,4 +136,4 @@ dist
 .pnp.*
 
 # ignore edushooter build
-edushooter_server/
+edushooter_server/*
