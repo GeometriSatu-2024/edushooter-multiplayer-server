@@ -37,6 +37,17 @@ if (!isServerMode) {
   );
 }
 
+const isWindows = process.platform === "win32";
+if (!isWindows) {
+  console.log(
+    `Node server is running not on Windows, most likely on a linux server. Currently on ${process.platform}`
+  );
+} else {
+  console.log(
+    "Running on windows, defaulting to localhost."
+  );
+}
+
 // Initialize
 const lobbies = new Map();
 
@@ -599,8 +610,6 @@ async function handleStartGame(
   if (!difficultyLevel) {
     difficultyLevel = 0;
   }
-
-  const isWindows = process.platform === "win32";
 
   const startCommand = "start_server.bat";
   const externalIP = isWindows ? LOCALHOST : SERVER_IP;
