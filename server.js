@@ -25,6 +25,9 @@ const SERVER_IP = "34.124.184.249";
 
 const AVAILABLE_PORTS = [50000, 50001, 50002, 50003, 50004, 50005]; // TODO, make it dynamic according to lobby sizes
 
+const windowsCMD = "start_server.bat";
+const linuxCMD = "start_server.sh"
+
 // is it local or not
 const isServerMode = process.argv.includes("servermode");
 if (!isServerMode) {
@@ -47,6 +50,7 @@ if (!isWindows) {
     "Running on windows, defaulting to localhost."
   );
 }
+
 
 // Initialize
 const lobbies = new Map();
@@ -197,11 +201,11 @@ function getLobbyCodeFromPlayerId(playerId) {
   return null;
 }
 
-async function runServerScript(isWindows, scriptPath, args = []) {
+async function runServerScript(isWindows, args = []) {
   return new Promise((resolve) => {
     const script = isWindows
-      ? spawn("cmd.exe", ["/c", "start", "", scriptPath, ...args], { detached: true })
-      : spawn("bash", [scriptPath, ...args], { detached: true, stdio: 'ignore' });
+      ? spawn("cmd.exe", ["/c", "start", "", windowsCMD, ...args], { detached: true })
+      : spawn("bash", [linuxCMD, ...args], { detached: true, stdio: 'ignore' });
 
     script.unref();
     
@@ -611,12 +615,11 @@ async function handleStartGame(
     difficultyLevel = 0;
   }
 
-  const startCommand = "start_server.bat";
   const externalIP = isWindows ? LOCALHOST : SERVER_IP;
   const args = [playerCount, externalIP, difficultyLevel, portAddress];
 
   console.log(
-    `Attempting to start game server with batch file: ${startCommand} ${args.join(
+    `Attempting to start game server with batch file: ${windowsCMD} ${args.join(
       " "
     )}`
   );
@@ -624,7 +627,7 @@ async function handleStartGame(
   let scriptResult = false;
   if (isServerMode) {
     console.log("Starting a bash script to start game server");
-    scriptResult = await runServerScript(isWindows, startCommand, args);
+    scriptResult = await runServerScript(isWindows, args);
   } else {
     console.log("Just returning a true");
     scriptResult = true;
