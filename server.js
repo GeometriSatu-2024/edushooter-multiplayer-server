@@ -201,7 +201,13 @@ function getLobbyCodeFromPlayerId(playerId) {
   return null;
 }
 
-async function runServerScript(isWindows, scriptPath, args = []) {
+async function runServerScript(scriptPath, args = []) {
+  console.log(
+    `Attempting to start game server with batch file: ${scriptPath} ${args.join(
+      " "
+    )}`
+  );
+
   return new Promise((resolve) => {
     const script = isWindows
       ? spawn("cmd.exe", ["/c", "start", "", scriptPath, ...args], { detached: true })
@@ -619,12 +625,6 @@ async function handleStartGame(
   const args = [playerCount, externalIP, difficultyLevel, portAddress];
 
   const scriptPath = isWindows ? windowsCMD : linuxCMD;
-
-  console.log(
-    `Attempting to start game server with batch file: ${windowsCMD} ${args.join(
-      " "
-    )}`
-  );
 
   let scriptResult = false;
   if (isServerMode) {
