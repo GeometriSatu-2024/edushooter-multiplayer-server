@@ -11,4 +11,4 @@ echo "IP: $PUBLIC_IP"
 echo "Difficulty: $DIFFICULTY"
 echo "Port: $PORT"
 
-./edushooter_server/Edushooter -servermode -players "$PLAYER_COUNT" -external_address "$PUBLIC_IP" -difficulty "$DIFFICULTY" -port "$PORT" -listen_address 0.0.0.0 &
+./edushooter_server/edushooter_server.x86_64 -servermode -batchmode -nographics -players "$PLAYER_COUNT" -external_address "$PUBLIC_IP" -difficulty "$DIFFICULTY" -port "$PORT" -listen_address 0.0.0.0 &
