@@ -25,8 +25,8 @@ const SERVER_IP = "34.124.184.249";
 
 const AVAILABLE_PORTS = [50000, 50001, 50002, 50003, 50004, 50005]; // TODO, make it dynamic according to lobby sizes
 
-const windowsCMD = "start_server.bat";
-const linuxCMD = "start_server.sh"
+const windowsCMD = "./start_server.bat";
+const linuxCMD = "./start_server.sh"
 
 // is it local or not
 const isServerMode = process.argv.includes("servermode");
