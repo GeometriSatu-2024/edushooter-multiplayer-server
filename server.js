@@ -657,6 +657,12 @@ async function handleStartGame(
     lobby.players.forEach((player) => {
       player.socket.send(serverReadyMsg);
     });
+
+    // Set all player states to unready
+    lobby.players.forEach((player) => {
+      player.setReady(false);
+    });
+
   }
 }
 
