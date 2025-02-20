@@ -201,9 +201,15 @@ function getLobbyCodeFromPlayerId(playerId) {
   return null;
 }
 
-async function runServerScript(scriptPath, args = []) {
+async function runServerScript(scriptPath, args = [], forceError = false) {
   
   return new Promise((resolve) => {
+    if (forceError) {
+      console.log("Resolving running bash script as false");
+      resolve(false);
+      return;
+    }
+
     let script;
     if (isWindows){
       console.log("Executing windows bash file..");
@@ -219,6 +225,7 @@ async function runServerScript(scriptPath, args = []) {
     script.on("error", (err) => {
       console.error(`Failed to start process: ${err.message}`);
       resolve(false);
+      return;
     });
     
     // If process successfully launches, we return a true
@@ -634,13 +641,45 @@ async function handleStartGame(
       )}`
     );
 
+    // get the current lobby and notify everyone EXCEPT the initiator to pause
+    let lobby = lobbies.get(lobbyCode);
+    const notificationMessage = JSON.stringify({
+      success: true,
+      action: "STARTING_GAME_SESSION",
+      message: "The leader is attempting to start a game session."
+    });
+
+    lobby.players.forEach((player) => {
+      if (player.id !== playerId) {
+        player.socket.send(notificationMessage);
+      }
+    });
+
     scriptResult = await runServerScript(scriptPath, args);
+
   } else {
     console.log("Just returning a true");
     scriptResult = true;
   }
 
+  // Artificial delay
+  delay(2000);
   if (!scriptResult) {
+    // get the current lobby and notify everyone EXCEPT the initiator about the error
+    let lobby = lobbies.get(lobbyCode);
+    const errorMessage = JSON.stringify({
+      success: false,
+      action: "ABORT_GAME_START",
+      error: "UNKNOWN_ERROR",
+      message: "Failed to enter the game session. The leader should try again!"
+    });
+
+    lobby.players.forEach((player) => {
+      if (player.id !== playerId) {
+        player.socket.send(errorMessage);
+      }
+    });
+
     ws.send(
       JSON.stringify({
         success: false,
