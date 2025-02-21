@@ -10,4 +10,4 @@ echo IP: %PUBLIC_IP%
 echo Difficulty: %DIFFICULTY%
 echo Port: %PORT%
 
-start "" /b edushooter_server\Edushooter.exe -servermode -players "%PLAYER_COUNT%" -external_address "%PUBLIC_IP%" -difficulty "%DIFFICULTY%" -port "%PORT%" -listen_address 0.0.0.0
+start "" /b edushooter_server\Edushooter.exe -servermode -invincibleplayers -rounds 3 -initialenemycount 8 -players "%PLAYER_COUNT%" -external_address "%PUBLIC_IP%" -difficulty "%DIFFICULTY%" -port "%PORT%" -listen_address 0.0.0.0
