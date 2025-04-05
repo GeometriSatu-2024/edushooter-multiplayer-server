@@ -8,7 +8,7 @@ const MAX_LOBBIES = 5;
 const MAX_PLAYERS_PER_LOBBY = 4;
 const COUNTDOWN_SECONDS = 5;
 
-const LOBBY_PORT = 30000;
+const LOBBY_PORT = 31000;
 const VALID_COMMANDS = [
   "CREATE_LOBBY(playerId)",
   "JOIN_LOBBY(playerId, lobbyCode)",
@@ -21,7 +21,7 @@ const GAME_START_DELAY = 8000;
 
 // Network config
 const LOCALHOST = "127.0.0.1";
-const SERVER_IP = "34.124.184.249";
+const SERVER_IP = "103.13.206.139";
 
 const AVAILABLE_PORTS = [50000, 50001, 50002, 50003, 50004, 50005]; // TODO, make it dynamic according to lobby sizes
 
