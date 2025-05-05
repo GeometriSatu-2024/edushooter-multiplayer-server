@@ -21,7 +21,7 @@ const GAME_START_DELAY = 8000;
 
 // Network config
 const LOCALHOST = "127.0.0.1";
-const SERVER_IP = "103.52.114.78";
+const SERVER_IP = "103.187.146.184";
 
 const AVAILABLE_PORTS = [50000, 50001, 50002, 50003, 50004, 50005]; // TODO, make it dynamic according to lobby sizes
 
